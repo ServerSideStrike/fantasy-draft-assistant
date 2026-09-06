@@ -301,7 +301,7 @@
   }
 
   function pprSortValue(p){
-    const s=statsByPlayerId[p.id];
+    const s=statsById[p.id];
     return s ? Number(s.pts_ppr ?? s.ppr ?? s.fpts_ppr ?? 0) : -1;
   }
 
