@@ -131,6 +131,20 @@
     .league-actions button{border:1px solid #475569;background:#111827;color:#fff;border-radius:10px;padding:9px 13px;font-weight:700}
     .league-actions .primary{background:#2563eb;border-color:#2563eb}
 
+  
+    /* v2.6.1 mobile header/search containment fix */
+    html,body{max-width:100%;overflow-x:hidden}
+    .app-header{width:100%;max-width:100%;box-sizing:border-box;min-width:0}
+    .header-copy{min-width:0;flex:1 1 auto}
+    .header-search{min-width:0;max-width:300px;box-sizing:border-box}
+    .header-search input{min-width:0;max-width:100%;box-sizing:border-box}
+    @media(max-width:620px){
+      .app-header{display:grid;grid-template-columns:minmax(0,1fr) minmax(120px,42vw);width:100%;max-width:100%;align-items:center}
+      .header-copy{min-width:0;overflow:hidden}
+      .header-search{width:100%;min-width:0;max-width:none;margin-left:0;justify-self:end}
+      .header-search input{width:100%;min-width:0;max-width:100%;font-size:14px;padding:8px}
+    }
+
   </style>
 </head>
 <body>
