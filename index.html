@@ -13,25 +13,42 @@
   <style>
     :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
     *{box-sizing:border-box}
+    html{scroll-behavior:smooth}
     body{margin:0;background:#0b1020;color:#f8fafc}
     button,input,select{font:inherit}
     button{min-height:44px}
-    .wrap{max-width:980px;margin:auto;padding:14px}
-    header{position:sticky;top:0;z-index:10;background:rgba(11,16,32,.96);padding:10px 0 12px}
+    .wrap{max-width:1080px;margin:auto;padding:14px}
+    header{position:sticky;top:0;z-index:20;background:rgba(11,16,32,.98);padding:10px 0 10px}
     h1{font-size:22px;margin:0 0 10px}
     .tabs,.filters{display:flex;gap:8px;flex-wrap:wrap}
     .tabs button,.filters button,.tier-btn{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:10px;padding:8px 12px}
     .tabs button.active,.filters button.active{background:#2563eb;border-color:#2563eb}
     input,select{min-height:44px;background:#111827;color:#fff;border:1px solid #334155;border-radius:10px;padding:9px 10px}
-    input{width:100%;margin:10px 0}
+    input{width:100%;margin:10px 0 8px}
     .status{font-size:13px;color:#94a3b8;margin-top:8px}
+
+    .team-tabs-wrap{margin:6px -14px 4px;padding:0 14px;overflow-x:auto;overscroll-behavior-inline:contain;scrollbar-width:thin}
+    .team-tabs{display:flex;gap:7px;width:max-content;padding:4px 0 7px}
+    .team-tab{white-space:nowrap;border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:999px;padding:7px 13px;min-height:40px}
+    .team-tab.active{background:#2563eb;border-color:#2563eb;color:#fff;font-weight:700}
+
     .team{border:1px solid #243047;border-radius:14px;margin:12px 0;overflow:hidden}
-    .team h2{font-size:17px;margin:0;padding:12px 14px;background:#111827}
-    .position h3{font-size:13px;letter-spacing:.08em;color:#94a3b8;margin:0;padding:10px 14px 6px}
-    .player{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 12px;border-top:1px solid #1e293b}
+    .team h2{font-size:20px;margin:0;padding:14px 16px;background:#111827}
+    .position h3{
+      font-size:18px;
+      letter-spacing:.06em;
+      margin:0;
+      padding:12px 14px;
+      background:#182236;
+      border-top:1px solid #334155;
+      border-bottom:1px solid #334155;
+    }
+    .player{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #1e293b}
     .player.drafted{opacity:.46}
-    .name{font-weight:600}
-    .meta{font-size:12px;color:#94a3b8;margin-top:2px}
+    .name{font-weight:650;font-size:16px}
+    .meta{font-size:12px;color:#94a3b8;margin-top:3px}
+    .stats{font-size:12px;color:#cbd5e1;margin-top:5px;line-height:1.45}
+    .stat-primary{font-weight:700;color:#f8fafc}
     .actions{display:flex;gap:6px;align-items:center}
     .tier-select{width:64px}
     .draft-btn{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:9px;padding:7px 9px;min-width:44px}
@@ -43,36 +60,66 @@
     .small{font-size:12px;color:#94a3b8}
     .empty{padding:18px;color:#94a3b8;text-align:center}
     .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
-    .toolbar button{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:10px;padding:8px 12px}
-    @media(max-width:520px){.player{grid-template-columns:1fr}.actions{justify-content:flex-end}.wrap{padding:10px}}
+    .toolbar button,.toolbar label span{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:10px;padding:8px 12px}
+    .scoring-wrap{display:flex;align-items:center;gap:7px;font-size:13px;color:#cbd5e1}
+    .scoring-wrap select{min-height:40px;padding:6px 9px}
+
+    @media(max-width:620px){
+      .player{grid-template-columns:1fr}
+      .actions{justify-content:flex-end}
+      .wrap{padding:10px}
+      .team-tabs-wrap{margin-left:-10px;margin-right:-10px;padding-left:10px;padding-right:10px}
+      .position h3{font-size:19px;padding:13px 14px}
+    }
   </style>
 </head>
 <body>
 <div class="wrap">
   <header>
     <h1>Fantasy Draft Assistant</h1>
+
     <div class="tabs">
       <button id="playersTab" class="active">Players</button>
       <button id="boardTab">My Board</button>
     </div>
-    <input id="search" placeholder="Search player or team…" autocomplete="off">
+
+    <input id="search" placeholder="Search player…" autocomplete="off">
+
+    <div id="teamNavHost" class="team-tabs-wrap">
+      <div id="teamTabs" class="team-tabs"></div>
+    </div>
+
     <div class="filters" id="positionFilters"></div>
+
     <div class="toolbar">
       <button id="availableToggle">Available only: Off</button>
-      <button id="refreshBtn">Refresh players</button>
+      <div class="scoring-wrap">
+        <span>2025 points:</span>
+        <select id="scoringSelect" aria-label="Fantasy scoring format">
+          <option value="PPR">PPR</option>
+          <option value="HALF">Half PPR</option>
+          <option value="STD">Standard</option>
+        </select>
+      </div>
+      <button id="refreshBtn">Refresh players & stats</button>
       <button id="exportBtn">Export rankings</button>
       <label style="display:inline-flex;align-items:center">
         <input id="importFile" type="file" accept=".json,application/json" style="display:none">
-        <span class="draft-btn" role="button" tabindex="0" id="importLabel">Import rankings</span>
+        <span role="button" tabindex="0" id="importLabel">Import rankings</span>
       </label>
     </div>
+
     <div id="status" class="status">Loading player data…</div>
   </header>
+
   <main id="content"></main>
 </div>
+
 <script>
 (() => {
-  const API = "https://api.sleeper.app/v1/players/nfl?active=true";
+  const PLAYER_API = "https://api.sleeper.app/v1/players/nfl?active=true";
+  const STATS_API = "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2025.csv";
+
   const TEAM_NAMES = {
     ARI:"Arizona Cardinals",ATL:"Atlanta Falcons",BAL:"Baltimore Ravens",BUF:"Buffalo Bills",
     CAR:"Carolina Panthers",CHI:"Chicago Bears",CIN:"Cincinnati Bengals",CLE:"Cleveland Browns",
@@ -84,19 +131,31 @@
     SF:"San Francisco 49ers",TB:"Tampa Bay Buccaneers",TEN:"Tennessee Titans",WAS:"Washington Commanders",
     FA:"Free Agents"
   };
+  const TEAM_ORDER = Object.keys(TEAM_NAMES).filter(t=>t!=="FA").sort((a,b)=>TEAM_NAMES[a].localeCompare(TEAM_NAMES[b])).concat("FA");
   const POSITIONS = ["ALL","QB","RB","WR","TE","K","DEF"];
   const TIERS = ["","S","A","B","C","D"];
-  const STORAGE = "fantasyDraftAssistantState.v2";
-  const CACHE = "fantasyDraftAssistantPlayers.v2";
+  const STORAGE = "fantasyDraftAssistantState.v3";
+  const PLAYER_CACHE = "fantasyDraftAssistantPlayers.v3";
+  const STATS_CACHE = "fantasyDraftAssistantStats2025.v1";
+  const PREFS = "fantasyDraftAssistantPrefs.v1";
 
   let players = [];
+  let statsByName = {};
   let view = "players";
   let position = "ALL";
+  let selectedTeam = localStorage.getItem(PREFS+".team") || "DAL";
   let availableOnly = false;
+  let scoring = localStorage.getItem(PREFS+".scoring") || "PPR";
   let state = JSON.parse(localStorage.getItem(STORAGE) || '{"rankings":{},"drafted":{},"mine":{}}');
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const num = v => { const n=Number(v); return Number.isFinite(n)?n:0; };
+  const fmt = (v,d=0) => Number.isFinite(Number(v)) ? Number(v).toFixed(d) : "—";
+  const normalizeName = s => String(s||"").toLowerCase()
+    .normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/\b(jr|sr|ii|iii|iv)\b\.?/g,"")
+    .replace(/[^a-z0-9]/g,"");
 
   function saveState(){ localStorage.setItem(STORAGE, JSON.stringify(state)); }
 
@@ -113,60 +172,160 @@
     };
   }
 
-  async function loadPlayers(force=false){
-    $("status").textContent = force ? "Refreshing player data…" : "Loading player data…";
-    if(!force){
-      try{
-        const cached = JSON.parse(localStorage.getItem(CACHE) || "null");
-        if(cached && cached.players && Date.now()-cached.savedAt < 24*60*60*1000){
-          players = cached.players;
-          $("status").textContent = `${players.length} active fantasy players loaded from device cache.`;
-          render(); return;
-        }
-      }catch{}
+  function parseCSV(text){
+    const rows=[]; let row=[], field="", quoted=false;
+    for(let i=0;i<text.length;i++){
+      const c=text[i];
+      if(quoted){
+        if(c === '"' && text[i+1] === '"'){ field+='"'; i++; }
+        else if(c === '"') quoted=false;
+        else field+=c;
+      }else{
+        if(c === '"') quoted=true;
+        else if(c === ","){ row.push(field); field=""; }
+        else if(c === "\n"){ row.push(field.replace(/\r$/,"")); rows.push(row); row=[]; field=""; }
+        else field+=c;
+      }
     }
-    try{
-      const r = await fetch(API);
-      if(!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
-      players = Object.entries(data).map(([id,p])=>normalizePlayer(id,p)).filter(Boolean);
-      localStorage.setItem(CACHE, JSON.stringify({savedAt:Date.now(),players}));
-      $("status").textContent = `${players.length} active fantasy players loaded.`;
-      render();
-    }catch(err){
-      try{
-        const cached = JSON.parse(localStorage.getItem(CACHE) || "null");
-        if(cached?.players?.length){
-          players = cached.players;
-          $("status").textContent = `Offline: using ${players.length} cached players.`;
-          render(); return;
-        }
-      }catch{}
-      $("status").textContent = "Could not load players. Connect to the internet and tap Refresh players.";
-      $("content").innerHTML = '<div class="empty">Player data unavailable.</div>';
+    if(field.length || row.length){ row.push(field); rows.push(row); }
+    return rows;
+  }
+
+  function buildStatsMap(text){
+    const rows=parseCSV(text);
+    if(rows.length<2) return {};
+    const headers=rows[0];
+    const idx=Object.fromEntries(headers.map((h,i)=>[h,i]));
+    const get=(r,...names)=>{
+      for(const n of names) if(idx[n]!==undefined) return r[idx[n]];
+      return "";
+    };
+    const map={};
+    for(const r of rows.slice(1)){
+      const name=get(r,"player_display_name","player_name","name");
+      if(!name) continue;
+      const rec=num(get(r,"receptions"));
+      const std=num(get(r,"fantasy_points"));
+      const ppr=num(get(r,"fantasy_points_ppr"));
+      const games=num(get(r,"games"));
+      map[normalizeName(name)]={
+        name,
+        team:get(r,"recent_team","team"),
+        position:get(r,"position"),
+        games,
+        std,
+        ppr,
+        half: std + (0.5*rec),
+        passYds:num(get(r,"passing_yards")),
+        passTD:num(get(r,"passing_tds")),
+        passInt:num(get(r,"interceptions","passing_interceptions")),
+        rushAtt:num(get(r,"carries","rushing_attempts")),
+        rushYds:num(get(r,"rushing_yards")),
+        rushTD:num(get(r,"rushing_tds")),
+        targets:num(get(r,"targets")),
+        rec,
+        recYds:num(get(r,"receiving_yards")),
+        recTD:num(get(r,"receiving_tds"))
+      };
+    }
+    return map;
+  }
+
+  async function loadPlayers(force=false){
+    const cached = !force ? JSON.parse(localStorage.getItem(PLAYER_CACHE) || "null") : null;
+    if(cached?.players?.length && Date.now()-cached.savedAt < 24*60*60*1000){
+      players=cached.players;
+      return true;
+    }
+    const r=await fetch(PLAYER_API);
+    if(!r.ok) throw new Error(`Sleeper HTTP ${r.status}`);
+    const data=await r.json();
+    players=Object.entries(data).map(([id,p])=>normalizePlayer(id,p)).filter(Boolean);
+    localStorage.setItem(PLAYER_CACHE,JSON.stringify({savedAt:Date.now(),players}));
+    return true;
+  }
+
+  async function loadStats(force=false){
+    const cached = !force ? JSON.parse(localStorage.getItem(STATS_CACHE) || "null") : null;
+    if(cached?.stats && Object.keys(cached.stats).length){
+      statsByName=cached.stats;
+      return true;
+    }
+    const r=await fetch(STATS_API);
+    if(!r.ok) throw new Error(`nflverse HTTP ${r.status}`);
+    const text=await r.text();
+    statsByName=buildStatsMap(text);
+    localStorage.setItem(STATS_CACHE,JSON.stringify({savedAt:Date.now(),stats:statsByName}));
+    return true;
+  }
+
+  async function loadAll(force=false){
+    $("status").textContent=force?"Refreshing player data and 2025 stats…":"Loading player data and 2025 stats…";
+    let playerOK=false, statsOK=false;
+    try{ await loadPlayers(force); playerOK=true; }catch(e){
+      const c=JSON.parse(localStorage.getItem(PLAYER_CACHE)||"null");
+      if(c?.players?.length){players=c.players;playerOK=true;}
+    }
+    try{ await loadStats(force); statsOK=true; }catch(e){
+      const c=JSON.parse(localStorage.getItem(STATS_CACHE)||"null");
+      if(c?.stats){statsByName=c.stats;statsOK=true;}
+    }
+    if(playerOK){
+      $("status").textContent=`${players.length} active players loaded${statsOK?" • 2025 stats loaded":" • 2025 stats unavailable (player rankings still work)"}.`;
+      renderTeamTabs(); render();
+    }else{
+      $("status").textContent="Could not load players. Connect to the internet and tap Refresh players & stats.";
+      $("content").innerHTML='<div class="empty">Player data unavailable.</div>';
     }
   }
 
   function filteredPlayers(){
-    const q = $("search").value.trim().toLowerCase();
-    return players.filter(p => {
-      if(position !== "ALL" && p.position !== position) return false;
+    const q=$("search").value.trim().toLowerCase();
+    return players.filter(p=>{
+      if(selectedTeam && p.team!==selectedTeam) return false;
+      if(position!=="ALL" && p.position!==position) return false;
       if(availableOnly && state.drafted[p.id]) return false;
       if(q && !`${p.name} ${p.team} ${TEAM_NAMES[p.team]||""}`.toLowerCase().includes(q)) return false;
       return true;
     });
   }
 
-  function playerRow(p, showRank=false){
-    const tier = state.rankings[p.id]?.tier || "";
-    const rank = state.rankings[p.id]?.rank || "";
-    const drafted = !!state.drafted[p.id];
-    const mine = !!state.mine[p.id];
-    const injury = p.injury ? ` • ${esc(p.injury)}` : "";
+  function fantasyPoints(s){
+    if(!s) return null;
+    if(scoring==="STD") return s.std;
+    if(scoring==="HALF") return s.half;
+    return s.ppr;
+  }
+
+  function statsLine(p){
+    const s=statsByName[normalizeName(p.name)];
+    if(!s) return `<div class="stats">2025: no regular-season stats found</div>`;
+    const pts=fantasyPoints(s);
+    const ppg=s.games>0?pts/s.games:null;
+    let detail="";
+    if(p.position==="QB"){
+      detail=`Pass ${fmt(s.passYds)} YD / ${fmt(s.passTD)} TD • Rush ${fmt(s.rushYds)} YD / ${fmt(s.rushTD)} TD`;
+    }else if(p.position==="RB"){
+      detail=`${fmt(s.rushAtt)} CAR • ${fmt(s.rushYds)} RUSH YD • ${fmt(s.rec)} REC • ${fmt(s.recYds)} REC YD • ${fmt(s.rushTD+s.recTD)} TD`;
+    }else if(p.position==="WR" || p.position==="TE"){
+      detail=`${fmt(s.targets)} TGT • ${fmt(s.rec)} REC • ${fmt(s.recYds)} YD • ${fmt(s.recTD)} TD`;
+    }else{
+      detail=`${fmt(s.games)} games`;
+    }
+    return `<div class="stats"><span class="stat-primary">${fmt(pts,1)} ${scoring} pts</span>${ppg!==null?` • ${fmt(ppg,1)} PPG`:""}<br>${detail}</div>`;
+  }
+
+  function playerRow(p,showRank=false){
+    const tier=state.rankings[p.id]?.tier||"";
+    const rank=state.rankings[p.id]?.rank||"";
+    const drafted=!!state.drafted[p.id];
+    const mine=!!state.mine[p.id];
+    const injury=p.injury?` • ${esc(p.injury)}`:"";
     return `<div class="player ${drafted?'drafted':''} ${mine?'mine':''}" data-id="${esc(p.id)}">
       <div>
         <div class="name">${showRank?`<span class="rank">${rank||""}</span> `:""}${esc(p.name)}</div>
         <div class="meta">${esc(p.team)} • ${esc(p.position)}${injury}${drafted?" • Drafted":""}${mine?" • MY TEAM":""}</div>
+        ${statsLine(p)}
       </div>
       <div class="actions">
         <select class="tier-select" aria-label="Tier for ${esc(p.name)}">
@@ -179,27 +338,28 @@
   }
 
   function renderPlayers(){
-    const grouped = {};
-    filteredPlayers().forEach(p=>{
-      const team = p.team || "FA";
-      (grouped[team] ||= {});
-      (grouped[team][p.position] ||= []).push(p);
-    });
-    const teams = Object.keys(grouped).sort((a,b)=>(TEAM_NAMES[a]||a).localeCompare(TEAM_NAMES[b]||b));
-    if(!teams.length) return '<div class="empty">No matching players.</div>';
-    return teams.map(team=>{
-      const sections = ["QB","RB","WR","TE","K","DEF"].filter(pos=>grouped[team][pos]?.length).map(pos=>{
-        const arr = grouped[team][pos].sort((a,b)=>a.name.localeCompare(b.name));
-        return `<div class="position"><h3>${pos}</h3>${arr.map(p=>playerRow(p)).join("")}</div>`;
-      }).join("");
-      return `<section class="team"><h2>${esc(TEAM_NAMES[team]||team)} <span class="small">(${esc(team)})</span></h2>${sections}</section>`;
+    const arr=filteredPlayers();
+    if(!arr.length) return '<div class="empty">No matching players for this team/filter.</div>';
+    const team=selectedTeam;
+    const sections=["QB","RB","WR","TE","K","DEF"].filter(pos=>arr.some(p=>p.position===pos)).map(pos=>{
+      const list=arr.filter(p=>p.position===pos).sort((a,b)=>{
+        const at=state.rankings[a.id]?.tier||"Z", bt=state.rankings[b.id]?.tier||"Z";
+        if(at!==bt) return at.localeCompare(bt);
+        return a.name.localeCompare(b.name);
+      });
+      return `<div class="position" id="pos-${pos}"><h3>${pos}</h3>${list.map(p=>playerRow(p)).join("")}</div>`;
     }).join("");
+    return `<section class="team"><h2>${esc(TEAM_NAMES[team]||team)} <span class="small">(${esc(team)})</span></h2>${sections}</section>`;
   }
 
   function renderBoard(){
     return ["S","A","B","C","D"].map(tier=>{
-      const arr = players.filter(p=>state.rankings[p.id]?.tier===tier)
-        .sort((a,b)=>(state.rankings[a.id]?.rank||9999)-(state.rankings[b.id]?.rank||9999));
+      let arr=players.filter(p=>state.rankings[p.id]?.tier===tier);
+      if(position!=="ALL") arr=arr.filter(p=>p.position===position);
+      if(availableOnly) arr=arr.filter(p=>!state.drafted[p.id]);
+      const q=$("search").value.trim().toLowerCase();
+      if(q) arr=arr.filter(p=>`${p.name} ${p.team}`.toLowerCase().includes(q));
+      arr.sort((a,b)=>(state.rankings[a.id]?.rank||9999)-(state.rankings[b.id]?.rank||9999));
       return `<section class="tier-section">
         <div class="tier-head"><strong>Tier ${tier}</strong><span class="small">${arr.length} players</span></div>
         ${arr.length?arr.map(p=>playerRow(p,true)).join(""):'<div class="empty">No players assigned</div>'}
@@ -208,18 +368,18 @@
   }
 
   function rerank(tier){
-    const ids = Object.keys(state.rankings).filter(id=>state.rankings[id]?.tier===tier)
+    const ids=Object.keys(state.rankings).filter(id=>state.rankings[id]?.tier===tier)
       .sort((a,b)=>(state.rankings[a].rank||9999)-(state.rankings[b].rank||9999));
     ids.forEach((id,i)=>state.rankings[id].rank=i+1);
   }
 
   function setTier(id,tier){
-    const old = state.rankings[id]?.tier;
-    if(!tier){ delete state.rankings[id]; if(old) rerank(old); }
+    const old=state.rankings[id]?.tier;
+    if(!tier){delete state.rankings[id]; if(old) rerank(old);}
     else{
-      const max = Math.max(0,...Object.values(state.rankings).filter(x=>x.tier===tier).map(x=>x.rank||0));
-      state.rankings[id] = {tier,rank:max+1};
-      if(old && old!==tier) rerank(old);
+      const max=Math.max(0,...Object.values(state.rankings).filter(x=>x.tier===tier).map(x=>x.rank||0));
+      state.rankings[id]={tier,rank:max+1};
+      if(old&&old!==tier) rerank(old);
     }
     saveState(); render();
   }
@@ -239,8 +399,29 @@
     });
   }
 
+  function renderTeamTabs(){
+    const host=$("teamTabs");
+    host.innerHTML="";
+    TEAM_ORDER.forEach(team=>{
+      const b=document.createElement("button");
+      b.type="button";
+      b.className="team-tab"+(team===selectedTeam?" active":"");
+      b.textContent=team;
+      b.title=TEAM_NAMES[team];
+      b.addEventListener("click",()=>{
+        selectedTeam=team;
+        localStorage.setItem(PREFS+".team",selectedTeam);
+        renderTeamTabs();
+        render();
+        b.scrollIntoView({behavior:"smooth",block:"nearest",inline:"center"});
+      });
+      host.appendChild(b);
+    });
+  }
+
   function render(){
-    $("content").innerHTML = view==="players" ? renderPlayers() : renderBoard();
+    $("teamNavHost").style.display=view==="players"?"block":"none";
+    $("content").innerHTML=view==="players"?renderPlayers():renderBoard();
     $("playersTab").classList.toggle("active",view==="players");
     $("boardTab").classList.toggle("active",view==="board");
     bindRows();
@@ -253,10 +434,19 @@
       position=pos;
       document.querySelectorAll("#positionFilters button").forEach(x=>x.classList.toggle("active",x.textContent===pos));
       render();
+      if(view==="players"&&pos!=="ALL"){
+        setTimeout(()=>document.getElementById("pos-"+pos)?.scrollIntoView({behavior:"smooth",block:"start"}),50);
+      }
     });
     $("positionFilters").appendChild(b);
   });
 
+  $("scoringSelect").value=scoring;
+  $("scoringSelect").addEventListener("change",e=>{
+    scoring=e.target.value;
+    localStorage.setItem(PREFS+".scoring",scoring);
+    render();
+  });
   $("playersTab").addEventListener("click",()=>{view="players";render()});
   $("boardTab").addEventListener("click",()=>{view="board";render()});
   $("search").addEventListener("input",render);
@@ -265,9 +455,9 @@
     $("availableToggle").textContent=`Available only: ${availableOnly?"On":"Off"}`;
     render();
   });
-  $("refreshBtn").addEventListener("click",()=>loadPlayers(true));
+  $("refreshBtn").addEventListener("click",()=>loadAll(true));
   $("exportBtn").addEventListener("click",()=>{
-    const blob=new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});
+    const blob=new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});
     const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="fantasy-draft-rankings.json"; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href),1000);
   });
@@ -284,8 +474,9 @@
     e.target.value="";
   });
 
+  renderTeamTabs();
   if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
-  loadPlayers();
+  loadAll();
 })();
 </script>
 </body>
