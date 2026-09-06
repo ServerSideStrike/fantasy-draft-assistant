@@ -158,13 +158,78 @@
       .header-actions .header-search input{min-width:0;width:100%;padding:8px 7px}
     }
 
+  
+    /* v2.6.3 corrected header structure */
+    .app-header{
+      display:grid;
+      grid-template-columns:minmax(0,1fr) minmax(280px,420px);
+      align-items:center;
+      gap:12px;
+      width:100%;
+      max-width:100%;
+      box-sizing:border-box;
+      margin-bottom:10px;
+    }
+    .header-copy{min-width:0;overflow:visible}
+    .header-copy h1{margin:0}
+    .header-actions{
+      display:grid;
+      grid-template-columns:auto minmax(160px,1fr);
+      align-items:center;
+      gap:8px;
+      width:100%;
+      min-width:0;
+      margin-left:0;
+    }
+    .header-actions .league-btn{white-space:nowrap}
+    .header-actions .header-search{
+      width:100%;
+      min-width:0;
+      max-width:none;
+      margin:0;
+    }
+    .header-actions .header-search input{
+      width:100%;
+      min-width:0;
+      max-width:100%;
+      box-sizing:border-box;
+    }
+    @media(max-width:620px){
+      .app-header{
+        grid-template-columns:minmax(0,.8fr) minmax(205px,1.2fr);
+        gap:7px;
+      }
+      .header-copy h1{font-size:18px;line-height:1.05}
+      .header-actions{
+        grid-template-columns:auto minmax(115px,1fr);
+        gap:5px;
+      }
+      .header-actions .league-btn{
+        padding:7px 6px;
+        font-size:11px;
+      }
+      .header-actions .header-search input{
+        padding:7px 6px;
+        font-size:13px;
+      }
+    }
+    @media(max-width:390px){
+      .header-copy h1{font-size:16px}
+      .app-header{grid-template-columns:minmax(0,.65fr) minmax(210px,1.35fr)}
+      .header-actions .league-btn{font-size:0;padding:7px 9px}
+      .header-actions .league-btn::first-letter{font-size:14px}
+    }
+
   </style>
 </head>
 <body>
 <div class="wrap">
-  <header><div class="app-header">
-      <div class="header-copy">
-    <h1>Fantasy Draft Assistant</h1>
+  <header>
+    <div class="app-header">
+      <div class="header-copy"><h1>Fantasy Draft Assistant</h1></div>
+      <div class="header-actions"><button id="leagueBtn" class="league-btn">⚙ League</button><div class="header-search"><input id="search" placeholder="Search player…" autocomplete="off"></div></div>
+    </div>
+
 
     <div class="tabs">
       <button id="playersTab" class="active">Players</button>
@@ -196,9 +261,7 @@
     </div>
 
     <div id="status" class="status">Loading player data…</div>
-  </div>
-      <div class="header-actions"><button id="leagueBtn" class="league-btn">⚙ League</button><div class="header-search"><input id="search" placeholder="Search player…" autocomplete="off"></div></div>
-    </div></header>
+  </header>
 
   <main id="content"></main>
 </div>
