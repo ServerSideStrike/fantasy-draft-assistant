@@ -63,6 +63,16 @@
     .clear-rank-btn:disabled{opacity:.3}
     .tier-select{width:64px}
     .draft-btn{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:9px;padding:7px 9px;min-width:44px}
+    .rank-move{display:flex;gap:4px}
+    .rank-move button{border:1px solid #475569;background:#111827;color:#e5e7eb;border-radius:9px;min-width:38px;min-height:38px;padding:5px 7px;font-weight:800}
+    .rank-move button:disabled{opacity:.25}
+    .draft-summary{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+    .draft-chip{border:1px solid #334155;background:#111827;border-radius:10px;padding:8px 10px;font-size:13px;color:#cbd5e1}
+    .draft-chip strong{color:#fff}
+    .draft-mode-head{display:flex;justify-content:space-between;gap:10px;align-items:center;margin:12px 0}
+    .draft-mode-head h2{margin:0;font-size:21px}
+    .undo-btn{border:1px solid #475569;background:#111827;color:#fff;border-radius:10px;padding:8px 12px;font-weight:700}
+    .undo-btn:disabled{opacity:.35}
     .mine{outline:2px solid #22c55e}
     .tier-section{margin:12px 0;border:1px solid #243047;border-radius:14px;overflow:hidden}
     .tier-head{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:#111827}
@@ -76,6 +86,9 @@
     .scoring-wrap select{min-height:40px;padding:6px 9px}
 
     @media(max-width:620px){
+      .tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+      .tabs button{width:100%;padding-left:7px;padding-right:7px}
+
       .player{grid-template-columns:1fr}
       .identity{grid-template-columns:52px minmax(0,1fr)}
       .headshot{width:52px;height:52px}
@@ -95,6 +108,7 @@
       <button id="playersTab" class="active">Players</button>
       <button id="boardTab">My Rankings</button>
       <button id="myTeamTab">My Team</button>
+      <button id="draftTab">Draft Mode</button>
     </div>
 
     <input id="search" placeholder="Search player…" autocomplete="off">
@@ -155,7 +169,11 @@
   let selectedTeam = localStorage.getItem(PREFS+".team") || "DAL";
   let availableOnly = false;
   let scoring = localStorage.getItem(PREFS+".scoring") || "PPR";
-  let state = JSON.parse(localStorage.getItem(STORAGE) || '{"rankings":{},"drafted":{},"mine":{}}');
+  let state = JSON.parse(localStorage.getItem(STORAGE) || '{"rankings":{},"drafted":{},"mine":{},"history":[]}');
+  state.rankings=state.rankings||{};
+  state.drafted=state.drafted||{};
+  state.mine=state.mine||{};
+  state.history=Array.isArray(state.history)?state.history:[];
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -310,22 +328,36 @@
     return s ? Number(s.pts_ppr ?? s.ppr ?? s.fpts_ppr ?? 0) : -1;
   }
 
-  function playerRow(p,showRank=false){
+  function playerRow(p,showRank=false,allowMove=false){
     const tier=state.rankings[p.id]?.tier||"";
     const rank=state.rankings[p.id]?.rank||"";
     const drafted=!!state.drafted[p.id];
     const mine=!!state.mine[p.id];
     const injury=p.injury?` • ${esc(p.injury)}`:"";
+
+    let moveControls="";
+    if(allowMove && tier){
+      const tierIds=Object.keys(state.rankings)
+        .filter(id=>state.rankings[id]?.tier===tier)
+        .sort((a,b)=>(state.rankings[a].rank||9999)-(state.rankings[b].rank||9999));
+      const idx=tierIds.indexOf(p.id);
+      moveControls=`<div class="rank-move">
+        <button class="move-up-btn" title="Move ${esc(p.name)} up in Tier ${tier}" ${idx<=0?"disabled":""}>↑</button>
+        <button class="move-down-btn" title="Move ${esc(p.name)} down in Tier ${tier}" ${idx<0||idx>=tierIds.length-1?"disabled":""}>↓</button>
+      </div>`;
+    }
+
     return `<div class="player ${drafted?'drafted':''} ${mine?'mine':''}" data-id="${esc(p.id)}">
       <div class="identity">
         ${headshotMarkup(p)}
         <div class="player-copy">
           <div class="name">${showRank?`<span class="rank">${rank||""}</span> `:""}${esc(p.name)}</div>
-          <div class="meta">${esc(p.team)} • ${esc(p.position)}${injury}${drafted?" • Drafted":""}${mine?" • MY TEAM":""}</div>
+          <div class="meta">${esc(p.team)} • ${esc(p.position)}${tier?` • ${tier}${rank}`:""}${injury}${drafted?" • Drafted":""}${mine?" • MY TEAM":""}</div>
           ${statsLine(p)}
         </div>
       </div>
       <div class="actions">
+        ${moveControls}
         <button class="clear-rank-btn" title="Clear ranking" ${tier?"":"disabled"}>Clr</button>
         <select class="tier-select" aria-label="Tier for ${esc(p.name)}">
           ${TIERS.map(t=>`<option value="${t}" ${t===tier?'selected':''}>${t||"—"}</option>`).join("")}
@@ -385,9 +417,42 @@
       arr.sort((a,b)=>(state.rankings[a.id]?.rank||9999)-(state.rankings[b.id]?.rank||9999));
       return `<section class="tier-section">
         <div class="tier-head"><strong>Tier ${tier}</strong><span class="small">${arr.length} players</span></div>
-        ${arr.length?arr.map(p=>playerRow(p,true)).join(""):'<div class="empty">No players assigned</div>'}
+        ${arr.length?arr.map(p=>playerRow(p,true,true)).join(""):'<div class="empty">No players assigned</div>'}
       </section>`;
     }).join("");
+  }
+
+  function renderDraftMode(){
+    const q=$("search").value.trim().toLowerCase();
+    let ranked=players.filter(p=>state.rankings[p.id]?.tier && !state.drafted[p.id]);
+    if(position!=="ALL") ranked=ranked.filter(p=>p.position===position);
+    if(q) ranked=ranked.filter(p=>`${p.name} ${p.team} ${TEAM_NAMES[p.team]||""}`.toLowerCase().includes(q));
+
+    const myCount=Object.keys(state.mine).filter(id=>state.mine[id]).length;
+    const draftedCount=Object.keys(state.drafted).filter(id=>state.drafted[id]).length;
+    const availableRanked=ranked.length;
+    const historyCount=state.history.length;
+
+    const sections=["S","A","B","C","D"].map(tier=>{
+      const arr=ranked.filter(p=>state.rankings[p.id]?.tier===tier)
+        .sort((a,b)=>(state.rankings[a.id]?.rank||9999)-(state.rankings[b.id]?.rank||9999));
+      if(!arr.length) return "";
+      return `<section class="tier-section">
+        <div class="tier-head"><strong>Tier ${tier}</strong><span class="small">${arr.length} available</span></div>
+        ${arr.map(p=>playerRow(p,true,true)).join("")}
+      </section>`;
+    }).join("");
+
+    return `<div class="draft-mode-head">
+      <h2>Best Available</h2>
+      <button id="undoDraftBtn" class="undo-btn" ${historyCount?"":"disabled"}>↶ Undo Last Pick</button>
+    </div>
+    <div class="draft-summary">
+      <div class="draft-chip">Available ranked: <strong>${availableRanked}</strong></div>
+      <div class="draft-chip">Drafted: <strong>${draftedCount}</strong></div>
+      <div class="draft-chip">My Team: <strong>${myCount}</strong></div>
+    </div>
+    ${sections || `<div class="empty">${q?"No available ranked players match your search/filter.":"No available ranked players. Add players to S/A/B/C/D in My Rankings."}</div>`}`;
   }
 
   function renderMyTeam(){
@@ -420,8 +485,43 @@
     ids.forEach((id,i)=>state.rankings[id].rank=i+1);
   }
 
+  function moveRank(id,direction){
+    const tier=state.rankings[id]?.tier;
+    if(!tier) return;
+    const ids=Object.keys(state.rankings)
+      .filter(pid=>state.rankings[pid]?.tier===tier)
+      .sort((a,b)=>(state.rankings[a].rank||9999)-(state.rankings[b].rank||9999));
+    const idx=ids.indexOf(id);
+    const swapIdx=idx+direction;
+    if(idx<0 || swapIdx<0 || swapIdx>=ids.length) return;
+    const other=ids[swapIdx];
+    const tmp=state.rankings[id].rank;
+    state.rankings[id].rank=state.rankings[other].rank;
+    state.rankings[other].rank=tmp;
+    saveState(); render();
+  }
+
+  function rememberDraftAction(id){
+    state.history.push({
+      id:String(id),
+      drafted:!!state.drafted[id],
+      mine:!!state.mine[id],
+      at:Date.now()
+    });
+    if(state.history.length>50) state.history=state.history.slice(-50);
+  }
+
+  function undoLastDraftAction(){
+    const last=state.history.pop();
+    if(!last) return;
+    if(last.drafted) state.drafted[last.id]=true; else delete state.drafted[last.id];
+    if(last.mine) state.mine[last.id]=true; else delete state.mine[last.id];
+    saveState(); render();
+  }
+
   function setTier(id,tier){
     const old=state.rankings[id]?.tier;
+    if(old===tier) return;
     if(!tier){delete state.rankings[id]; if(old) rerank(old);}
     else{
       const max=Math.max(0,...Object.values(state.rankings).filter(x=>x.tier===tier).map(x=>x.rank||0));
@@ -453,11 +553,19 @@
       const id=row.dataset.id;
       row.querySelector(".clear-rank-btn").addEventListener("click",()=>setTier(id,""));
       row.querySelector(".tier-select").addEventListener("change",e=>setTier(id,e.target.value));
+      const up=row.querySelector(".move-up-btn");
+      const down=row.querySelector(".move-down-btn");
+      if(up) up.addEventListener("click",()=>moveRank(id,-1));
+      if(down) down.addEventListener("click",()=>moveRank(id,1));
+
       row.querySelector(".drafted-btn").addEventListener("click",()=>{
-        state.drafted[id]=!state.drafted[id]; if(!state.drafted[id]) delete state.drafted[id];
+        rememberDraftAction(id);
+        state.drafted[id]=!state.drafted[id];
+        if(!state.drafted[id]) delete state.drafted[id];
         saveState(); render();
       });
       row.querySelector(".mine-btn").addEventListener("click",()=>{
+        rememberDraftAction(id);
         state.mine[id]=!state.mine[id];
         if(state.mine[id]){
           state.drafted[id]=true;
@@ -508,12 +616,17 @@
     $("teamNavHost").style.display=view==="players"?"block":"none";
     if(view==="players") $("content").innerHTML=renderPlayers();
     else if(view==="board") $("content").innerHTML=renderBoard();
-    else $("content").innerHTML=renderMyTeam();
+    else if(view==="myteam") $("content").innerHTML=renderMyTeam();
+    else $("content").innerHTML=renderDraftMode();
 
     $("playersTab").classList.toggle("active",view==="players");
     $("boardTab").classList.toggle("active",view==="board");
     $("myTeamTab").classList.toggle("active",view==="myteam");
+    $("draftTab").classList.toggle("active",view==="draft");
+
     bindRows();
+    const undo=$("undoDraftBtn");
+    if(undo) undo.addEventListener("click",undoLastDraftAction);
   }
 
   POSITIONS.forEach(pos=>{
@@ -523,8 +636,8 @@
       position=pos;
       document.querySelectorAll("#positionFilters button").forEach(x=>x.classList.toggle("active",x.textContent===pos));
       render();
-      if(view==="players"&&pos!=="ALL"){
-        setTimeout(()=>document.getElementById("pos-"+pos)?.scrollIntoView({behavior:"smooth",block:"start"}),50);
+      if(view==="players"&&pos!=="ALL"&&pos!=="DEF"){
+        setTimeout(()=>document.getElementById(`pos-${selectedTeam}-${pos}`)?.scrollIntoView({behavior:"smooth",block:"start"}),50);
       }
     });
     $("positionFilters").appendChild(b);
@@ -539,6 +652,7 @@
   $("playersTab").addEventListener("click",()=>{view="players";render()});
   $("boardTab").addEventListener("click",()=>{view="board";render()});
   $("myTeamTab").addEventListener("click",()=>{view="myteam";render()});
+  $("draftTab").addEventListener("click",()=>{view="draft";render()});
   $("search").addEventListener("input",render);
   $("availableToggle").addEventListener("click",()=>{
     availableOnly=!availableOnly;
