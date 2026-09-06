@@ -44,6 +44,10 @@
       border-bottom:1px solid #334155;
     }
     .player{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:center;padding:10px 12px;border-top:1px solid #1e293b}
+    .identity{display:grid;grid-template-columns:56px minmax(0,1fr);gap:10px;align-items:center;min-width:0}
+    .headshot{width:56px;height:56px;border-radius:12px;overflow:hidden;background:#182236;border:1px solid #334155;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px;font-weight:700;flex:0 0 auto}
+    .headshot img{width:100%;height:100%;object-fit:cover;object-position:center top;display:block}
+    .player-copy{min-width:0}
     .player.drafted{opacity:.46}
     .name{font-weight:650;font-size:16px}
     .meta{font-size:12px;color:#94a3b8;margin-top:3px}
@@ -66,6 +70,8 @@
 
     @media(max-width:620px){
       .player{grid-template-columns:1fr}
+      .identity{grid-template-columns:52px minmax(0,1fr)}
+      .headshot{width:52px;height:52px}
       .actions{justify-content:flex-end}
       .wrap{padding:10px}
       .team-tabs-wrap{margin-left:-10px;margin-right:-10px;padding-left:10px;padding-right:10px}
@@ -283,6 +289,22 @@
     return `<div class="stats"><span class="stat-primary">${fmt(pts,1)} ${scoring} pts</span>${ppg!==null?` • ${fmt(ppg,1)} PPG`:""}<br>${detail}</div>`;
   }
 
+  function headshotMarkup(p){
+    // Sleeper player portraits use the same stable player ID already used by the app.
+    // DEF entries usually do not have a player portrait, so use a team-abbreviation fallback.
+    const fallback=esc((p.position==="DEF" ? p.team : p.name.split(/\s+/).map(x=>x[0]).slice(0,2).join("")).toUpperCase());
+    if(p.position==="DEF"){
+      return `<div class="headshot" aria-hidden="true">${fallback}</div>`;
+    }
+    const url=`https://sleepercdn.com/content/nfl/players/${encodeURIComponent(p.id)}.jpg`;
+    return `<div class="headshot" aria-hidden="true"><span class="photo-fallback">${fallback}</span><img class="player-photo" src="${url}" alt="" loading="lazy" decoding="async"></div>`;
+  }
+
+  function pprSortValue(p){
+    const s=statsByPlayerId[p.id];
+    return s ? Number(s.pts_ppr ?? s.ppr ?? s.fpts_ppr ?? 0) : -1;
+  }
+
   function playerRow(p,showRank=false){
     const tier=state.rankings[p.id]?.tier||"";
     const rank=state.rankings[p.id]?.rank||"";
@@ -290,10 +312,13 @@
     const mine=!!state.mine[p.id];
     const injury=p.injury?` • ${esc(p.injury)}`:"";
     return `<div class="player ${drafted?'drafted':''} ${mine?'mine':''}" data-id="${esc(p.id)}">
-      <div>
-        <div class="name">${showRank?`<span class="rank">${rank||""}</span> `:""}${esc(p.name)}</div>
-        <div class="meta">${esc(p.team)} • ${esc(p.position)}${injury}${drafted?" • Drafted":""}${mine?" • MY TEAM":""}</div>
-        ${statsLine(p)}
+      <div class="identity">
+        ${headshotMarkup(p)}
+        <div class="player-copy">
+          <div class="name">${showRank?`<span class="rank">${rank||""}</span> `:""}${esc(p.name)}</div>
+          <div class="meta">${esc(p.team)} • ${esc(p.position)}${injury}${drafted?" • Drafted":""}${mine?" • MY TEAM":""}</div>
+          ${statsLine(p)}
+        </div>
       </div>
       <div class="actions">
         <select class="tier-select" aria-label="Tier for ${esc(p.name)}">
@@ -311,8 +336,8 @@
     const team=selectedTeam;
     const sections=["QB","RB","WR","TE","K","DEF"].filter(pos=>arr.some(p=>p.position===pos)).map(pos=>{
       const list=arr.filter(p=>p.position===pos).sort((a,b)=>{
-        const at=state.rankings[a.id]?.tier||"Z", bt=state.rankings[b.id]?.tier||"Z";
-        if(at!==bt) return at.localeCompare(bt);
+        const diff=pprSortValue(b)-pprSortValue(a);
+        if(diff!==0) return diff;
         return a.name.localeCompare(b.name);
       });
       return `<div class="position" id="pos-${pos}"><h3>${pos}</h3>${list.map(p=>playerRow(p)).join("")}</div>`;
@@ -353,6 +378,23 @@
   }
 
   function bindRows(){
+    document.querySelectorAll(".player-photo").forEach(img=>{
+      const fail=()=>{
+        img.style.display="none";
+        const fallback=img.parentElement?.querySelector(".photo-fallback");
+        if(fallback) fallback.style.display="block";
+      };
+      img.addEventListener("error",fail,{once:true});
+      img.addEventListener("load",()=>{
+        const fallback=img.parentElement?.querySelector(".photo-fallback");
+        if(fallback) fallback.style.display="none";
+      },{once:true});
+      if(img.complete && img.naturalWidth===0) fail();
+      else if(img.complete && img.naturalWidth>0){
+        const fallback=img.parentElement?.querySelector(".photo-fallback");
+        if(fallback) fallback.style.display="none";
+      }
+    });
     document.querySelectorAll(".player").forEach(row=>{
       const id=row.dataset.id;
       row.querySelector(".tier-select").addEventListener("change",e=>setTier(id,e.target.value));
