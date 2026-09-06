@@ -86,6 +86,12 @@
     .scoring-wrap select{min-height:40px;padding:6px 9px}
 
     @media(max-width:620px){
+
+      .app-header{align-items:center;gap:8px}
+      .header-copy{min-width:0}
+      .header-search{flex:0 0 44%;min-width:135px;max-width:210px}
+      .header-search input{padding:8px 9px;font-size:14px}
+
       .tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
       .tabs button{width:100%;padding-left:7px;padding-right:7px}
 
@@ -97,11 +103,17 @@
       .team-tabs-wrap{margin-left:-10px;margin-right:-10px;padding-left:10px;padding-right:10px}
       .position h3{font-size:19px;padding:13px 14px}
     }
+  
+    .app-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
+    .header-search{margin-left:auto;flex:0 1 300px;min-width:180px}
+    .header-search input{width:100%;box-sizing:border-box}
+
   </style>
 </head>
 <body>
 <div class="wrap">
-  <header>
+  <header><div class="app-header">
+      <div class="header-copy">
     <h1>Fantasy Draft Assistant</h1>
 
     <div class="tabs">
@@ -111,7 +123,7 @@
       <button id="draftTab">Draft Mode</button>
     </div>
 
-    <input id="search" placeholder="Search player…" autocomplete="off">
+    
 
     <div id="teamNavHost" class="team-tabs-wrap">
       <div id="teamTabs" class="team-tabs"></div>
@@ -133,7 +145,9 @@
     </div>
 
     <div id="status" class="status">Loading player data…</div>
-  </header>
+  </div>
+      <div class="header-search"><input id="search" placeholder="Search player…" autocomplete="off"></div>
+    </div></header>
 
   <main id="content"></main>
 </div>
