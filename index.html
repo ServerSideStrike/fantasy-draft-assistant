@@ -118,7 +118,7 @@
 <script>
 (() => {
   const PLAYER_API = "https://api.sleeper.app/v1/players/nfl?active=true";
-  const STATS_API = "https://github.com/nflverse/nflverse-data/releases/download/stats_player/stats_player_reg_2025.csv";
+  const STATS_API = "https://api.sleeper.app/v1/stats/nfl/regular/2025";
 
   const TEAM_NAMES = {
     ARI:"Arizona Cardinals",ATL:"Atlanta Falcons",BAL:"Baltimore Ravens",BUF:"Buffalo Bills",
@@ -140,7 +140,7 @@
   const PREFS = "fantasyDraftAssistantPrefs.v1";
 
   let players = [];
-  let statsByName = {};
+  let statsById = {};
   let view = "players";
   let position = "ALL";
   let selectedTeam = localStorage.getItem(PREFS+".team") || "DAL";
@@ -172,63 +172,30 @@
     };
   }
 
-  function parseCSV(text){
-    const rows=[]; let row=[], field="", quoted=false;
-    for(let i=0;i<text.length;i++){
-      const c=text[i];
-      if(quoted){
-        if(c === '"' && text[i+1] === '"'){ field+='"'; i++; }
-        else if(c === '"') quoted=false;
-        else field+=c;
-      }else{
-        if(c === '"') quoted=true;
-        else if(c === ","){ row.push(field); field=""; }
-        else if(c === "\n"){ row.push(field.replace(/\r$/,"")); rows.push(row); row=[]; field=""; }
-        else field+=c;
-      }
-    }
-    if(field.length || row.length){ row.push(field); rows.push(row); }
-    return rows;
-  }
-
-  function buildStatsMap(text){
-    const rows=parseCSV(text);
-    if(rows.length<2) return {};
-    const headers=rows[0];
-    const idx=Object.fromEntries(headers.map((h,i)=>[h,i]));
-    const get=(r,...names)=>{
-      for(const n of names) if(idx[n]!==undefined) return r[idx[n]];
-      return "";
-    };
-    const map={};
-    for(const r of rows.slice(1)){
-      const name=get(r,"player_display_name","player_name","name");
-      if(!name) continue;
-      const rec=num(get(r,"receptions"));
-      const std=num(get(r,"fantasy_points"));
-      const ppr=num(get(r,"fantasy_points_ppr"));
-      const games=num(get(r,"games"));
-      map[normalizeName(name)]={
-        name,
-        team:get(r,"recent_team","team"),
-        position:get(r,"position"),
-        games,
-        std,
-        ppr,
-        half: std + (0.5*rec),
-        passYds:num(get(r,"passing_yards")),
-        passTD:num(get(r,"passing_tds")),
-        passInt:num(get(r,"interceptions","passing_interceptions")),
-        rushAtt:num(get(r,"carries","rushing_attempts")),
-        rushYds:num(get(r,"rushing_yards")),
-        rushTD:num(get(r,"rushing_tds")),
-        targets:num(get(r,"targets")),
-        rec,
-        recYds:num(get(r,"receiving_yards")),
-        recTD:num(get(r,"receiving_tds"))
+  function buildSleeperStatsMap(data){
+    const out={};
+    const absorb=(id,raw)=>{
+      if(!raw || typeof raw!=="object") return;
+      const st=(raw.stats && typeof raw.stats==="object") ? raw.stats : raw;
+      const playerId=String(raw.player_id || st.player_id || id || "");
+      if(!playerId) return;
+      const std=num(st.pts_std);
+      const ppr=num(st.pts_ppr);
+      const half=num(st.pts_half_ppr || st.pts_half || (std + 0.5*num(st.rec)));
+      out[playerId]={
+        games:num(st.gp || st.games),
+        std,ppr,half,
+        passYds:num(st.pass_yd), passTD:num(st.pass_td), passInt:num(st.pass_int),
+        rushAtt:num(st.rush_att), rushYds:num(st.rush_yd), rushTD:num(st.rush_td),
+        targets:num(st.rec_tgt || st.targets), rec:num(st.rec), recYds:num(st.rec_yd), recTD:num(st.rec_td)
       };
+    };
+    if(Array.isArray(data)){
+      for(const item of data) absorb(item?.player_id,item);
+    }else if(data && typeof data==="object"){
+      for(const [id,item] of Object.entries(data)) absorb(id,item);
     }
-    return map;
+    return out;
   }
 
   async function loadPlayers(force=false){
@@ -248,14 +215,15 @@
   async function loadStats(force=false){
     const cached = !force ? JSON.parse(localStorage.getItem(STATS_CACHE) || "null") : null;
     if(cached?.stats && Object.keys(cached.stats).length){
-      statsByName=cached.stats;
+      statsById=cached.stats;
       return true;
     }
     const r=await fetch(STATS_API);
     if(!r.ok) throw new Error(`nflverse HTTP ${r.status}`);
-    const text=await r.text();
-    statsByName=buildStatsMap(text);
-    localStorage.setItem(STATS_CACHE,JSON.stringify({savedAt:Date.now(),stats:statsByName}));
+    const data=await r.json();
+    statsById=buildSleeperStatsMap(data);
+    if(!Object.keys(statsById).length) throw new Error("Sleeper stats returned no usable records");
+    localStorage.setItem(STATS_CACHE,JSON.stringify({savedAt:Date.now(),stats:statsById}));
     return true;
   }
 
@@ -268,7 +236,7 @@
     }
     try{ await loadStats(force); statsOK=true; }catch(e){
       const c=JSON.parse(localStorage.getItem(STATS_CACHE)||"null");
-      if(c?.stats){statsByName=c.stats;statsOK=true;}
+      if(c?.stats){statsById=c.stats;statsOK=true;}
     }
     if(playerOK){
       $("status").textContent=`${players.length} active players loaded${statsOK?" • 2025 stats loaded":" • 2025 stats unavailable (player rankings still work)"}.`;
@@ -298,7 +266,7 @@
   }
 
   function statsLine(p){
-    const s=statsByName[normalizeName(p.name)];
+    const s=statsById[p.id];
     if(!s) return `<div class="stats">2025: no regular-season stats found</div>`;
     const pts=fantasyPoints(s);
     const ppg=s.games>0?pts/s.games:null;
