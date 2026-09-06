@@ -145,6 +145,19 @@
       .header-search input{width:100%;min-width:0;max-width:100%;font-size:14px;padding:8px}
     }
 
+  
+    /* v2.6.2 header actions */
+    .header-actions{display:flex;align-items:center;gap:8px;margin-left:auto;min-width:0;flex:0 1 auto}
+    .header-actions .league-btn{white-space:nowrap;flex:0 0 auto}
+    .header-actions .header-search{margin-left:0;flex:1 1 220px;min-width:0}
+    @media(max-width:620px){
+      .app-header{grid-template-columns:minmax(0,1fr) minmax(0,58vw)}
+      .header-actions{width:100%;min-width:0;gap:5px;justify-self:end}
+      .header-actions .league-btn{padding:8px 7px;font-size:12px}
+      .header-actions .header-search{flex:1 1 auto;width:auto;min-width:0}
+      .header-actions .header-search input{min-width:0;width:100%;padding:8px 7px}
+    }
+
   </style>
 </head>
 <body>
@@ -179,12 +192,12 @@
         </select>
       </div>
       <button id="refreshBtn">Refresh players & stats</button>
-      <button id="leagueBtn" class="league-btn">⚙ League</button>
+      
     </div>
 
     <div id="status" class="status">Loading player data…</div>
   </div>
-      <div class="header-search"><input id="search" placeholder="Search player…" autocomplete="off"></div>
+      <div class="header-actions"><button id="leagueBtn" class="league-btn">⚙ League</button><div class="header-search"><input id="search" placeholder="Search player…" autocomplete="off"></div></div>
     </div></header>
 
   <main id="content"></main>
