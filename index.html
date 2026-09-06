@@ -116,11 +116,6 @@
         </select>
       </div>
       <button id="refreshBtn">Refresh players & stats</button>
-      <button id="exportBtn">Export rankings</button>
-      <label style="display:inline-flex;align-items:center">
-        <input id="importFile" type="file" accept=".json,application/json" style="display:none">
-        <span role="button" tabindex="0" id="importLabel">Import rankings</span>
-      </label>
     </div>
 
     <div id="status" class="status">Loading player data…</div>
@@ -264,7 +259,9 @@
   function filteredPlayers(){
     const q=$("search").value.trim().toLowerCase();
     return players.filter(p=>{
-      if(selectedTeam && p.team!==selectedTeam) return false;
+      // Normal browsing stays scoped to the selected NFL team.
+      // As soon as the user searches, search the entire league instead.
+      if(!q && selectedTeam && p.team!==selectedTeam) return false;
       if(position!=="ALL" && p.position!==position) return false;
       if(availableOnly && state.drafted[p.id]) return false;
       if(q && !`${p.name} ${p.team} ${TEAM_NAMES[p.team]||""}`.toLowerCase().includes(q)) return false;
@@ -341,17 +338,28 @@
 
   function renderPlayers(){
     const arr=filteredPlayers();
-    if(!arr.length) return '<div class="empty">No matching players for this team/filter.</div>';
-    const team=selectedTeam;
-    const sections=["QB","RB","WR","TE","K","DEF"].filter(pos=>arr.some(p=>p.position===pos)).map(pos=>{
-      const list=arr.filter(p=>p.position===pos).sort((a,b)=>{
-        const diff=pprSortValue(b)-pprSortValue(a);
-        if(diff!==0) return diff;
-        return a.name.localeCompare(b.name);
-      });
-      return `<div class="position" id="pos-${pos}"><h3>${pos}</h3>${list.map(p=>playerRow(p)).join("")}</div>`;
-    }).join("");
-    return `<section class="team"><h2><span class="team-title">${teamLogoMarkup(team)}<span>${esc(team)}</span></span></h2>${sections}</section>`;
+    const q=$("search").value.trim().toLowerCase();
+    if(!arr.length) return `<div class="empty">${q?"No players found across the NFL.":"No matching players for this team/filter."}</div>`;
+
+    const renderTeamSection=(team,teamPlayers)=>{
+      const sections=["QB","RB","WR","TE","K","DEF"].filter(pos=>teamPlayers.some(p=>p.position===pos)).map(pos=>{
+        const list=teamPlayers.filter(p=>p.position===pos).sort((a,b)=>{
+          const diff=pprSortValue(b)-pprSortValue(a);
+          if(diff!==0) return diff;
+          return a.name.localeCompare(b.name);
+        });
+        return `<div class="position" id="pos-${team}-${pos}"><h3>${pos}</h3>${list.map(p=>playerRow(p)).join("")}</div>`;
+      }).join("");
+      return `<section class="team"><h2><span class="team-title">${teamLogoMarkup(team)}<span>${esc(team)}</span></span></h2>${sections}</section>`;
+    };
+
+    // Search results intentionally span all NFL teams and are grouped by team.
+    if(q){
+      const teams=[...new Set(arr.map(p=>p.team||"FA"))].sort((a,b)=>(TEAM_NAMES[a]||a).localeCompare(TEAM_NAMES[b]||b));
+      return teams.map(team=>renderTeamSection(team,arr.filter(p=>(p.team||"FA")===team))).join("");
+    }
+
+    return renderTeamSection(selectedTeam,arr);
   }
 
   function renderBoard(){
@@ -525,23 +533,6 @@
     render();
   });
   $("refreshBtn").addEventListener("click",()=>loadAll(true));
-  $("exportBtn").addEventListener("click",()=>{
-    const blob=new Blob([JSON.stringify({version:3,exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="fantasy-draft-rankings.json"; a.click();
-    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
-  });
-  $("importLabel").addEventListener("click",()=>$("importFile").click());
-  $("importLabel").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" ") $("importFile").click()});
-  $("importFile").addEventListener("change",async e=>{
-    const file=e.target.files[0]; if(!file) return;
-    try{
-      const obj=JSON.parse(await file.text());
-      if(!obj.state) throw new Error("Invalid file");
-      state=obj.state; saveState(); render();
-      $("status").textContent="Rankings imported successfully.";
-    }catch{$("status").textContent="That file could not be imported."}
-    e.target.value="";
-  });
 
   renderTeamTabs();
   if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
