@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Draft Board">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <title>Fantasy Draft Assistant</title>
+  <style>
+    :root{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color-scheme:dark}
+    *{box-sizing:border-box}
+    body{margin:0;background:#0b1020;color:#f8fafc}
+    button,input,select{font:inherit}
+    button{min-height:44px}
+    .wrap{max-width:980px;margin:auto;padding:14px}
+    header{position:sticky;top:0;z-index:10;background:rgba(11,16,32,.96);padding:10px 0 12px}
+    h1{font-size:22px;margin:0 0 10px}
+    .tabs,.filters{display:flex;gap:8px;flex-wrap:wrap}
+    .tabs button,.filters button,.tier-btn{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:10px;padding:8px 12px}
+    .tabs button.active,.filters button.active{background:#2563eb;border-color:#2563eb}
+    input,select{min-height:44px;background:#111827;color:#fff;border:1px solid #334155;border-radius:10px;padding:9px 10px}
+    input{width:100%;margin:10px 0}
+    .status{font-size:13px;color:#94a3b8;margin-top:8px}
+    .team{border:1px solid #243047;border-radius:14px;margin:12px 0;overflow:hidden}
+    .team h2{font-size:17px;margin:0;padding:12px 14px;background:#111827}
+    .position h3{font-size:13px;letter-spacing:.08em;color:#94a3b8;margin:0;padding:10px 14px 6px}
+    .player{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:9px 12px;border-top:1px solid #1e293b}
+    .player.drafted{opacity:.46}
+    .name{font-weight:600}
+    .meta{font-size:12px;color:#94a3b8;margin-top:2px}
+    .actions{display:flex;gap:6px;align-items:center}
+    .tier-select{width:64px}
+    .draft-btn{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:9px;padding:7px 9px;min-width:44px}
+    .mine{outline:2px solid #22c55e}
+    .tier-section{margin:12px 0;border:1px solid #243047;border-radius:14px;overflow:hidden}
+    .tier-head{display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:#111827}
+    .tier-head strong{font-size:18px}
+    .rank{width:28px;color:#94a3b8;text-align:right}
+    .small{font-size:12px;color:#94a3b8}
+    .empty{padding:18px;color:#94a3b8;text-align:center}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+    .toolbar button{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:10px;padding:8px 12px}
+    @media(max-width:520px){.player{grid-template-columns:1fr}.actions{justify-content:flex-end}.wrap{padding:10px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fantasy Draft Assistant</h1>
+    <div class="tabs">
+      <button id="playersTab" class="active">Players</button>
+      <button id="boardTab">My Board</button>
+    </div>
+    <input id="search" placeholder="Search player or team…" autocomplete="off">
+    <div class="filters" id="positionFilters"></div>
+    <div class="toolbar">
+      <button id="availableToggle">Available only: Off</button>
+      <button id="refreshBtn">Refresh players</button>
+      <button id="exportBtn">Export rankings</button>
+      <label style="display:inline-flex;align-items:center">
+        <input id="importFile" type="file" accept=".json,application/json" style="display:none">
+        <span class="draft-btn" role="button" tabindex="0" id="importLabel">Import rankings</span>
+      </label>
+    </div>
+    <div id="status" class="status">Loading player data…</div>
+  </header>
+  <main id="content"></main>
+</div>
+<script>
+(() => {
+  const API = "https://api.sleeper.app/v1/players/nfl?active=true";
+  const TEAM_NAMES = {
+    ARI:"Arizona Cardinals",ATL:"Atlanta Falcons",BAL:"Baltimore Ravens",BUF:"Buffalo Bills",
+    CAR:"Carolina Panthers",CHI:"Chicago Bears",CIN:"Cincinnati Bengals",CLE:"Cleveland Browns",
+    DAL:"Dallas Cowboys",DEN:"Denver Broncos",DET:"Detroit Lions",GB:"Green Bay Packers",
+    HOU:"Houston Texans",IND:"Indianapolis Colts",JAX:"Jacksonville Jaguars",KC:"Kansas City Chiefs",
+    LV:"Las Vegas Raiders",LAC:"Los Angeles Chargers",LAR:"Los Angeles Rams",MIA:"Miami Dolphins",
+    MIN:"Minnesota Vikings",NE:"New England Patriots",NO:"New Orleans Saints",NYG:"New York Giants",
+    NYJ:"New York Jets",PHI:"Philadelphia Eagles",PIT:"Pittsburgh Steelers",SEA:"Seattle Seahawks",
+    SF:"San Francisco 49ers",TB:"Tampa Bay Buccaneers",TEN:"Tennessee Titans",WAS:"Washington Commanders",
+    FA:"Free Agents"
+  };
+  const POSITIONS = ["ALL","QB","RB","WR","TE","K","DEF"];
+  const TIERS = ["","S","A","B","C","D"];
+  const STORAGE = "fantasyDraftAssistantState.v2";
+  const CACHE = "fantasyDraftAssistantPlayers.v2";
+
+  let players = [];
+  let view = "players";
+  let position = "ALL";
+  let availableOnly = false;
+  let state = JSON.parse(localStorage.getItem(STORAGE) || '{"rankings":{},"drafted":{},"mine":{}}');
+
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function saveState(){ localStorage.setItem(STORAGE, JSON.stringify(state)); }
+
+  function normalizePlayer(id,p){
+    const fantasy = Array.isArray(p.fantasy_positions) ? p.fantasy_positions : [];
+    let pos = p.position || fantasy[0] || "";
+    if(pos === "DST") pos = "DEF";
+    if(!["QB","RB","WR","TE","K","DEF"].includes(pos)) return null;
+    const full = p.full_name || [p.first_name,p.last_name].filter(Boolean).join(" ") || p.search_full_name;
+    if(!full) return null;
+    return {
+      id:String(id), name:full, team:p.team || "FA", position:pos,
+      number:p.number ?? null, status:p.status || "", injury:p.injury_status || ""
+    };
+  }
+
+  async function loadPlayers(force=false){
+    $("status").textContent = force ? "Refreshing player data…" : "Loading player data…";
+    if(!force){
+      try{
+        const cached = JSON.parse(localStorage.getItem(CACHE) || "null");
+        if(cached && cached.players && Date.now()-cached.savedAt < 24*60*60*1000){
+          players = cached.players;
+          $("status").textContent = `${players.length} active fantasy players loaded from device cache.`;
+          render(); return;
+        }
+      }catch{}
+    }
+    try{
+      const r = await fetch(API);
+      if(!r.ok) throw new Error(`HTTP ${r.status}`);
+      const data = await r.json();
+      players = Object.entries(data).map(([id,p])=>normalizePlayer(id,p)).filter(Boolean);
+      localStorage.setItem(CACHE, JSON.stringify({savedAt:Date.now(),players}));
+      $("status").textContent = `${players.length} active fantasy players loaded.`;
+      render();
+    }catch(err){
+      try{
+        const cached = JSON.parse(localStorage.getItem(CACHE) || "null");
+        if(cached?.players?.length){
+          players = cached.players;
+          $("status").textContent = `Offline: using ${players.length} cached players.`;
+          render(); return;
+        }
+      }catch{}
+      $("status").textContent = "Could not load players. Connect to the internet and tap Refresh players.";
+      $("content").innerHTML = '<div class="empty">Player data unavailable.</div>';
+    }
+  }
+
+  function filteredPlayers(){
+    const q = $("search").value.trim().toLowerCase();
+    return players.filter(p => {
+      if(position !== "ALL" && p.position !== position) return false;
+      if(availableOnly && state.drafted[p.id]) return false;
+      if(q && !`${p.name} ${p.team} ${TEAM_NAMES[p.team]||""}`.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }
+
+  function playerRow(p, showRank=false){
+    const tier = state.rankings[p.id]?.tier || "";
+    const rank = state.rankings[p.id]?.rank || "";
+    const drafted = !!state.drafted[p.id];
+    const mine = !!state.mine[p.id];
+    const injury = p.injury ? ` • ${esc(p.injury)}` : "";
+    return `<div class="player ${drafted?'drafted':''} ${mine?'mine':''}" data-id="${esc(p.id)}">
+      <div>
+        <div class="name">${showRank?`<span class="rank">${rank||""}</span> `:""}${esc(p.name)}</div>
+        <div class="meta">${esc(p.team)} • ${esc(p.position)}${injury}${drafted?" • Drafted":""}${mine?" • MY TEAM":""}</div>
+      </div>
+      <div class="actions">
+        <select class="tier-select" aria-label="Tier for ${esc(p.name)}">
+          ${TIERS.map(t=>`<option value="${t}" ${t===tier?'selected':''}>${t||"—"}</option>`).join("")}
+        </select>
+        <button class="draft-btn drafted-btn" title="Mark drafted">${drafted?"↩":"✓"}</button>
+        <button class="draft-btn mine-btn" title="My team">${mine?"★":"☆"}</button>
+      </div>
+    </div>`;
+  }
+
+  function renderPlayers(){
+    const grouped = {};
+    filteredPlayers().forEach(p=>{
+      const team = p.team || "FA";
+      (grouped[team] ||= {});
+      (grouped[team][p.position] ||= []).push(p);
+    });
+    const teams = Object.keys(grouped).sort((a,b)=>(TEAM_NAMES[a]||a).localeCompare(TEAM_NAMES[b]||b));
+    if(!teams.length) return '<div class="empty">No matching players.</div>';
+    return teams.map(team=>{
+      const sections = ["QB","RB","WR","TE","K","DEF"].filter(pos=>grouped[team][pos]?.length).map(pos=>{
+        const arr = grouped[team][pos].sort((a,b)=>a.name.localeCompare(b.name));
+        return `<div class="position"><h3>${pos}</h3>${arr.map(p=>playerRow(p)).join("")}</div>`;
+      }).join("");
+      return `<section class="team"><h2>${esc(TEAM_NAMES[team]||team)} <span class="small">(${esc(team)})</span></h2>${sections}</section>`;
+    }).join("");
+  }
+
+  function renderBoard(){
+    return ["S","A","B","C","D"].map(tier=>{
+      const arr = players.filter(p=>state.rankings[p.id]?.tier===tier)
+        .sort((a,b)=>(state.rankings[a.id]?.rank||9999)-(state.rankings[b.id]?.rank||9999));
+      return `<section class="tier-section">
+        <div class="tier-head"><strong>Tier ${tier}</strong><span class="small">${arr.length} players</span></div>
+        ${arr.length?arr.map(p=>playerRow(p,true)).join(""):'<div class="empty">No players assigned</div>'}
+      </section>`;
+    }).join("");
+  }
+
+  function rerank(tier){
+    const ids = Object.keys(state.rankings).filter(id=>state.rankings[id]?.tier===tier)
+      .sort((a,b)=>(state.rankings[a].rank||9999)-(state.rankings[b].rank||9999));
+    ids.forEach((id,i)=>state.rankings[id].rank=i+1);
+  }
+
+  function setTier(id,tier){
+    const old = state.rankings[id]?.tier;
+    if(!tier){ delete state.rankings[id]; if(old) rerank(old); }
+    else{
+      const max = Math.max(0,...Object.values(state.rankings).filter(x=>x.tier===tier).map(x=>x.rank||0));
+      state.rankings[id] = {tier,rank:max+1};
+      if(old && old!==tier) rerank(old);
+    }
+    saveState(); render();
+  }
+
+  function bindRows(){
+    document.querySelectorAll(".player").forEach(row=>{
+      const id=row.dataset.id;
+      row.querySelector(".tier-select").addEventListener("change",e=>setTier(id,e.target.value));
+      row.querySelector(".drafted-btn").addEventListener("click",()=>{
+        state.drafted[id]=!state.drafted[id]; if(!state.drafted[id]) delete state.drafted[id];
+        saveState(); render();
+      });
+      row.querySelector(".mine-btn").addEventListener("click",()=>{
+        state.mine[id]=!state.mine[id]; if(state.mine[id]) state.drafted[id]=true; else delete state.mine[id];
+        saveState(); render();
+      });
+    });
+  }
+
+  function render(){
+    $("content").innerHTML = view==="players" ? renderPlayers() : renderBoard();
+    $("playersTab").classList.toggle("active",view==="players");
+    $("boardTab").classList.toggle("active",view==="board");
+    bindRows();
+  }
+
+  POSITIONS.forEach(pos=>{
+    const b=document.createElement("button");
+    b.textContent=pos; b.className=pos==="ALL"?"active":"";
+    b.addEventListener("click",()=>{
+      position=pos;
+      document.querySelectorAll("#positionFilters button").forEach(x=>x.classList.toggle("active",x.textContent===pos));
+      render();
+    });
+    $("positionFilters").appendChild(b);
+  });
+
+  $("playersTab").addEventListener("click",()=>{view="players";render()});
+  $("boardTab").addEventListener("click",()=>{view="board";render()});
+  $("search").addEventListener("input",render);
+  $("availableToggle").addEventListener("click",()=>{
+    availableOnly=!availableOnly;
+    $("availableToggle").textContent=`Available only: ${availableOnly?"On":"Off"}`;
+    render();
+  });
+  $("refreshBtn").addEventListener("click",()=>loadPlayers(true));
+  $("exportBtn").addEventListener("click",()=>{
+    const blob=new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),state},null,2)],{type:"application/json"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="fantasy-draft-rankings.json"; a.click();
+    setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  });
+  $("importLabel").addEventListener("click",()=>$("importFile").click());
+  $("importLabel").addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" ") $("importFile").click()});
+  $("importFile").addEventListener("change",async e=>{
+    const file=e.target.files[0]; if(!file) return;
+    try{
+      const obj=JSON.parse(await file.text());
+      if(!obj.state) throw new Error("Invalid file");
+      state=obj.state; saveState(); render();
+      $("status").textContent="Rankings imported successfully.";
+    }catch{$("status").textContent="That file could not be imported."}
+    e.target.value="";
+  });
+
+  if("serviceWorker" in navigator) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+  loadPlayers();
+})();
+</script>
+</body>
+</html>
