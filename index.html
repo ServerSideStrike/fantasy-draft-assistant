@@ -86,7 +86,8 @@
 
     <div class="tabs">
       <button id="playersTab" class="active">Players</button>
-      <button id="boardTab">My Board</button>
+      <button id="boardTab">My Rankings</button>
+      <button id="myTeamTab">My Team</button>
     </div>
 
     <input id="search" placeholder="Search player…" autocomplete="off">
@@ -324,8 +325,8 @@
         <select class="tier-select" aria-label="Tier for ${esc(p.name)}">
           ${TIERS.map(t=>`<option value="${t}" ${t===tier?'selected':''}>${t||"—"}</option>`).join("")}
         </select>
-        <button class="draft-btn drafted-btn" title="Mark drafted">${drafted?"↩":"✓"}</button>
         <button class="draft-btn mine-btn" title="My team">${mine?"★":"☆"}</button>
+        <button class="draft-btn drafted-btn" title="Mark taken">${drafted&&!mine?"↩":"✕"}</button>
       </div>
     </div>`;
   }
@@ -356,6 +357,30 @@
       return `<section class="tier-section">
         <div class="tier-head"><strong>Tier ${tier}</strong><span class="small">${arr.length} players</span></div>
         ${arr.length?arr.map(p=>playerRow(p,true)).join(""):'<div class="empty">No players assigned</div>'}
+      </section>`;
+    }).join("");
+  }
+
+  function renderMyTeam(){
+    let arr=players.filter(p=>state.mine[p.id]);
+    const q=$("search").value.trim().toLowerCase();
+    if(q) arr=arr.filter(p=>`${p.name} ${p.team} ${TEAM_NAMES[p.team]||""}`.toLowerCase().includes(q));
+    if(position!=="ALL") arr=arr.filter(p=>p.position===position);
+
+    if(!arr.length){
+      return `<div class="empty">No players on My Team${position!=="ALL"?" at this position":""}. Tap ☆ next to a player when you draft them.</div>`;
+    }
+
+    const order=["QB","RB","WR","TE","K","DEF"];
+    return order.filter(pos=>arr.some(p=>p.position===pos)).map(pos=>{
+      const list=arr.filter(p=>p.position===pos).sort((a,b)=>{
+        const diff=pprSortValue(b)-pprSortValue(a);
+        if(diff!==0) return diff;
+        return a.name.localeCompare(b.name);
+      });
+      return `<section class="tier-section">
+        <div class="tier-head"><strong>${pos}</strong><span class="small">${list.length} player${list.length===1?"":"s"}</span></div>
+        ${list.map(p=>playerRow(p,false)).join("")}
       </section>`;
     }).join("");
   }
@@ -431,9 +456,13 @@
 
   function render(){
     $("teamNavHost").style.display=view==="players"?"block":"none";
-    $("content").innerHTML=view==="players"?renderPlayers():renderBoard();
+    if(view==="players") $("content").innerHTML=renderPlayers();
+    else if(view==="board") $("content").innerHTML=renderBoard();
+    else $("content").innerHTML=renderMyTeam();
+
     $("playersTab").classList.toggle("active",view==="players");
     $("boardTab").classList.toggle("active",view==="board");
+    $("myTeamTab").classList.toggle("active",view==="myteam");
     bindRows();
   }
 
@@ -459,6 +488,7 @@
   });
   $("playersTab").addEventListener("click",()=>{view="players";render()});
   $("boardTab").addEventListener("click",()=>{view="board";render()});
+  $("myTeamTab").addEventListener("click",()=>{view="myteam";render()});
   $("search").addEventListener("input",render);
   $("availableToggle").addEventListener("click",()=>{
     availableOnly=!availableOnly;
