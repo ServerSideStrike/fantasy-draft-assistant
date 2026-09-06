@@ -86,6 +86,7 @@
     .scoring-wrap select{min-height:40px;padding:6px 9px}
 
     @media(max-width:620px){
+      .league-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 
       .app-header{align-items:center;gap:8px}
       .header-copy{min-width:0}
@@ -107,6 +108,28 @@
     .app-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px}
     .header-search{margin-left:auto;flex:0 1 300px;min-width:180px}
     .header-search input{width:100%;box-sizing:border-box}
+
+  
+    .league-btn{border:1px solid #334155;background:#111827;color:#e5e7eb;border-radius:10px;padding:8px 11px;font-weight:700}
+    .needs-box{border:1px solid #334155;background:#0b1220;border-radius:12px;padding:10px 12px;margin:10px 0}
+    .needs-title{font-size:13px;font-weight:800;color:#fff;margin-bottom:7px}
+    .needs-chips{display:flex;gap:6px;flex-wrap:wrap}
+    .need-chip{border:1px solid #475569;background:#111827;color:#cbd5e1;border-radius:999px;padding:5px 8px;font-size:12px}
+    .need-chip.open{border-color:#f59e0b;color:#fbbf24}
+    .need-chip.done{border-color:#334155;color:#94a3b8}
+    .need-badge{display:inline-block;margin-left:5px;border:1px solid #f59e0b;color:#fbbf24;border-radius:999px;padding:1px 6px;font-size:10px;font-weight:800;vertical-align:1px}
+    .league-modal{position:fixed;inset:0;background:rgba(0,0,0,.68);display:none;align-items:center;justify-content:center;padding:16px;z-index:999}
+    .league-modal.open{display:flex}
+    .league-card{width:min(560px,100%);max-height:88vh;overflow:auto;background:#0f172a;border:1px solid #334155;border-radius:16px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.45)}
+    .league-card h2{margin:0 0 4px}
+    .league-card .sub{color:#94a3b8;font-size:13px;margin-bottom:14px}
+    .league-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+    .league-field{display:flex;flex-direction:column;gap:4px}
+    .league-field label{font-size:12px;color:#94a3b8;font-weight:700}
+    .league-field input,.league-field select{width:100%;box-sizing:border-box;background:#111827;color:#fff;border:1px solid #334155;border-radius:9px;padding:9px}
+    .league-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
+    .league-actions button{border:1px solid #475569;background:#111827;color:#fff;border-radius:10px;padding:9px 13px;font-weight:700}
+    .league-actions .primary{background:#2563eb;border-color:#2563eb}
 
   </style>
 </head>
@@ -142,6 +165,7 @@
         </select>
       </div>
       <button id="refreshBtn">Refresh players & stats</button>
+      <button id="leagueBtn" class="league-btn">⚙ League</button>
     </div>
 
     <div id="status" class="status">Loading player data…</div>
@@ -150,6 +174,30 @@
     </div></header>
 
   <main id="content"></main>
+</div>
+
+
+<div id="leagueModal" class="league-modal" aria-hidden="true">
+  <div class="league-card" role="dialog" aria-modal="true" aria-labelledby="leagueTitle">
+    <h2 id="leagueTitle">League Settings</h2>
+    <div class="sub">Set your league format once. My Team and Draft Mode will use it to track remaining roster needs.</div>
+    <div class="league-grid">
+      <div class="league-field"><label for="leagueTeams">Teams</label><input id="leagueTeams" type="number" min="4" max="32" step="1"></div>
+      <div class="league-field"><label for="leagueScoring">Scoring</label><select id="leagueScoring"><option value="PPR">PPR</option><option value="HALF">Half PPR</option><option value="STD">Standard</option></select></div>
+      <div class="league-field"><label for="leagueQB">QB</label><input id="leagueQB" type="number" min="0" max="4" step="1"></div>
+      <div class="league-field"><label for="leagueRB">RB</label><input id="leagueRB" type="number" min="0" max="8" step="1"></div>
+      <div class="league-field"><label for="leagueWR">WR</label><input id="leagueWR" type="number" min="0" max="8" step="1"></div>
+      <div class="league-field"><label for="leagueTE">TE</label><input id="leagueTE" type="number" min="0" max="4" step="1"></div>
+      <div class="league-field"><label for="leagueFLEX">FLEX</label><input id="leagueFLEX" type="number" min="0" max="4" step="1"></div>
+      <div class="league-field"><label for="leagueK">K</label><input id="leagueK" type="number" min="0" max="2" step="1"></div>
+      <div class="league-field"><label for="leagueDEF">DEF</label><input id="leagueDEF" type="number" min="0" max="2" step="1"></div>
+      <div class="league-field"><label for="leagueBench">Bench</label><input id="leagueBench" type="number" min="0" max="20" step="1"></div>
+    </div>
+    <div class="league-actions">
+      <button id="leagueCancel">Cancel</button>
+      <button id="leagueSave" class="primary">Save Settings</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -173,6 +221,10 @@
   const TIERS = ["","S","A","B","C","D"];
   const STORAGE = "fantasyDraftAssistantState.v3";
   const PLAYER_CACHE = "fantasyDraftAssistantPlayers.v3";
+  const LEAGUE_STORAGE = "fantasyDraftAssistantLeague.v1";
+  const DEFAULT_LEAGUE = {teams:12,scoring:"PPR",QB:1,RB:2,WR:2,TE:1,FLEX:1,K:1,DEF:1,BENCH:6};
+  let league = {...DEFAULT_LEAGUE,...JSON.parse(localStorage.getItem(LEAGUE_STORAGE)||"{}")};
+
   const STATS_CACHE = "fantasyDraftAssistantStats2025.v1";
   const PREFS = "fantasyDraftAssistantPrefs.v1";
 
@@ -182,7 +234,7 @@
   let position = "ALL";
   let selectedTeam = localStorage.getItem(PREFS+".team") || "DAL";
   let availableOnly = false;
-  let scoring = localStorage.getItem(PREFS+".scoring") || "PPR";
+  let scoring = localStorage.getItem(PREFS+".scoring") || league.scoring || "PPR";
   let state = JSON.parse(localStorage.getItem(STORAGE) || '{"rankings":{},"drafted":{},"mine":{},"history":[]}');
   state.rankings=state.rankings||{};
   state.drafted=state.drafted||{};
@@ -365,7 +417,7 @@
       <div class="identity">
         ${headshotMarkup(p)}
         <div class="player-copy">
-          <div class="name">${showRank?`<span class="rank">${rank||""}</span> `:""}${esc(p.name)}</div>
+          <div class="name">${showRank?`<span class="rank">${rank||""}</span> `:""}${esc(p.name)}${view==="draft"&&priorityNeedForPosition(p.position)?`<span class="need-badge">NEED ${priorityNeedForPosition(p.position)}</span>`:""}</div>
           <div class="meta">${esc(p.team)} • ${esc(p.position)}${tier?` • ${tier}${rank}`:""}${injury}${drafted?" • Drafted":""}${mine?" • MY TEAM":""}</div>
           ${statsLine(p)}
         </div>
@@ -436,6 +488,87 @@
     }).join("");
   }
 
+  function myTeamPlayers(){
+    return players.filter(p=>state.mine[p.id]);
+  }
+
+  function rosterNeeds(){
+    const counts={QB:0,RB:0,WR:0,TE:0,K:0,DEF:0};
+    myTeamPlayers().forEach(p=>{ if(counts[p.position]!==undefined) counts[p.position]++; });
+
+    const req={QB:+league.QB||0,RB:+league.RB||0,WR:+league.WR||0,TE:+league.TE||0,K:+league.K||0,DEF:+league.DEF||0};
+    const fixedNeeds={};
+    Object.keys(req).forEach(pos=>fixedNeeds[pos]=Math.max(0,req[pos]-counts[pos]));
+
+    // FLEX is filled only by RB/WR/TE players beyond their fixed starter requirements.
+    const flexEligibleExcess=["RB","WR","TE"].reduce((sum,pos)=>sum+Math.max(0,counts[pos]-req[pos]),0);
+    const flexFilled=Math.min(+league.FLEX||0,flexEligibleExcess);
+    const flexNeed=Math.max(0,(+league.FLEX||0)-flexFilled);
+
+    const fixedFilled=Object.keys(req).reduce((sum,pos)=>sum+Math.min(counts[pos],req[pos]),0);
+    const starterFilled=fixedFilled+flexFilled;
+    const totalPlayers=myTeamPlayers().length;
+    const benchFilled=Math.max(0,totalPlayers-starterFilled);
+    const benchNeed=Math.max(0,(+league.BENCH||0)-benchFilled);
+
+    return {counts,req,fixedNeeds,flexNeed,flexFilled,benchNeed,benchFilled,totalPlayers};
+  }
+
+  function priorityNeedForPosition(pos){
+    const n=rosterNeeds();
+    if(n.fixedNeeds[pos]>0) return pos;
+    if(["RB","WR","TE"].includes(pos) && n.flexNeed>0) return "FLEX";
+    return "";
+  }
+
+  function rosterNeedsMarkup(compact=false){
+    const n=rosterNeeds();
+    const chips=[];
+    ["QB","RB","WR","TE","K","DEF"].forEach(pos=>{
+      const need=n.fixedNeeds[pos];
+      chips.push(`<span class="need-chip ${need?"open":"done"}">${pos} ${n.counts[pos]}/${n.req[pos]}${need?` • need ${need}`:" ✓"}</span>`);
+    });
+    if((+league.FLEX||0)>0) chips.push(`<span class="need-chip ${n.flexNeed?"open":"done"}">FLEX ${n.flexFilled}/${+league.FLEX||0}${n.flexNeed?` • need ${n.flexNeed}`:" ✓"}</span>`);
+    if((+league.BENCH||0)>0) chips.push(`<span class="need-chip ${n.benchNeed?"open":"done"}">Bench ${n.benchFilled}/${+league.BENCH||0}${n.benchNeed?` • open ${n.benchNeed}`:" ✓"}</span>`);
+    return `<div class="needs-box"><div class="needs-title">Roster Needs • ${league.teams}-team ${league.scoring==="HALF"?"Half PPR":league.scoring==="STD"?"Standard":"PPR"}</div><div class="needs-chips">${chips.join("")}</div></div>`;
+  }
+
+  function openLeagueSettings(){
+    $("leagueTeams").value=league.teams;
+    $("leagueScoring").value=league.scoring;
+    ["QB","RB","WR","TE","FLEX","K","DEF"].forEach(pos=>$("league"+pos).value=league[pos]);
+    $("leagueBench").value=league.BENCH;
+    $("leagueModal").classList.add("open");
+    $("leagueModal").setAttribute("aria-hidden","false");
+  }
+
+  function closeLeagueSettings(){
+    $("leagueModal").classList.remove("open");
+    $("leagueModal").setAttribute("aria-hidden","true");
+  }
+
+  function saveLeagueSettings(){
+    const clamp=(id,min,max)=>Math.max(min,Math.min(max,parseInt($(id).value||"0",10)));
+    league={
+      teams:clamp("leagueTeams",4,32),
+      scoring:$("leagueScoring").value,
+      QB:clamp("leagueQB",0,4),
+      RB:clamp("leagueRB",0,8),
+      WR:clamp("leagueWR",0,8),
+      TE:clamp("leagueTE",0,4),
+      FLEX:clamp("leagueFLEX",0,4),
+      K:clamp("leagueK",0,2),
+      DEF:clamp("leagueDEF",0,2),
+      BENCH:clamp("leagueBench",0,20)
+    };
+    localStorage.setItem(LEAGUE_STORAGE,JSON.stringify(league));
+    scoring=league.scoring;
+    localStorage.setItem(PREFS+".scoring",scoring);
+    $("scoringSelect").value=scoring;
+    closeLeagueSettings();
+    render();
+  }
+
   function renderDraftMode(){
     const q=$("search").value.trim().toLowerCase();
     let ranked=players.filter(p=>state.rankings[p.id]?.tier && !state.drafted[p.id]);
@@ -466,6 +599,7 @@
       <div class="draft-chip">Drafted: <strong>${draftedCount}</strong></div>
       <div class="draft-chip">My Team: <strong>${myCount}</strong></div>
     </div>
+    ${rosterNeedsMarkup(true)}
     ${sections || `<div class="empty">${q?"No available ranked players match your search/filter.":"No available ranked players. Add players to S/A/B/C/D in My Rankings."}</div>`}`;
   }
 
@@ -476,11 +610,11 @@
     if(position!=="ALL") arr=arr.filter(p=>p.position===position);
 
     if(!arr.length){
-      return `<div class="empty">No players on My Team${position!=="ALL"?" at this position":""}. Tap ☆ next to a player when you draft them.</div>`;
+      return `${rosterNeedsMarkup()}<div class="empty">No players on My Team${position!=="ALL"?" at this position":""}. Tap ☆ next to a player when you draft them.</div>`;
     }
 
     const order=["QB","RB","WR","TE","K","DEF"];
-    return order.filter(pos=>arr.some(p=>p.position===pos)).map(pos=>{
+    return rosterNeedsMarkup()+order.filter(pos=>arr.some(p=>p.position===pos)).map(pos=>{
       const list=arr.filter(p=>p.position===pos).sort((a,b)=>{
         const diff=pprSortValue(b)-pprSortValue(a);
         if(diff!==0) return diff;
@@ -660,13 +794,19 @@
   $("scoringSelect").value=scoring;
   $("scoringSelect").addEventListener("change",e=>{
     scoring=e.target.value;
+    league.scoring=scoring;
     localStorage.setItem(PREFS+".scoring",scoring);
+    localStorage.setItem(LEAGUE_STORAGE,JSON.stringify(league));
     render();
   });
   $("playersTab").addEventListener("click",()=>{view="players";render()});
   $("boardTab").addEventListener("click",()=>{view="board";render()});
   $("myTeamTab").addEventListener("click",()=>{view="myteam";render()});
   $("draftTab").addEventListener("click",()=>{view="draft";render()});
+  $("leagueBtn").addEventListener("click",openLeagueSettings);
+  $("leagueCancel").addEventListener("click",closeLeagueSettings);
+  $("leagueSave").addEventListener("click",saveLeagueSettings);
+  $("leagueModal").addEventListener("click",e=>{if(e.target===$("leagueModal")) closeLeagueSettings();});
   $("search").addEventListener("input",render);
   $("availableToggle").addEventListener("click",()=>{
     availableOnly=!availableOnly;
