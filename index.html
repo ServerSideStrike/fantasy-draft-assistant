@@ -249,14 +249,14 @@
     <div class="toolbar">
       <button id="availableToggle">Available only: Off</button>
       <div class="scoring-wrap">
-        <span>2025 points:</span>
+        <span>Scoring:</span>
         <select id="scoringSelect" aria-label="Fantasy scoring format">
           <option value="PPR">PPR</option>
           <option value="HALF">Half PPR</option>
           <option value="STD">Standard</option>
         </select>
       </div>
-      <button id="refreshBtn">Refresh players & stats</button>
+      <button id="refreshBtn">Refresh data</button>
       
     </div>
 
@@ -294,6 +294,7 @@
 (() => {
   const PLAYER_API = "https://api.sleeper.app/v1/players/nfl?active=true";
   const STATS_API = "https://api.sleeper.app/v1/stats/nfl/regular/2025";
+  const PROJECTIONS_API = "https://api.sleeper.app/v1/projections/nfl/regular/2026";
 
   const TEAM_NAMES = {
     ARI:"Arizona Cardinals",ATL:"Atlanta Falcons",BAL:"Baltimore Ravens",BUF:"Buffalo Bills",
@@ -316,10 +317,12 @@
   let league = {...DEFAULT_LEAGUE,...JSON.parse(localStorage.getItem(LEAGUE_STORAGE)||"{}")};
 
   const STATS_CACHE = "fantasyDraftAssistantStats2025.v1";
+  const PROJECTIONS_CACHE = "fantasyDraftAssistantProjections2026.v1";
   const PREFS = "fantasyDraftAssistantPrefs.v1";
 
   let players = [];
   let statsById = {};
+  let projectionsById = {};
   let view = "players";
   let position = "ALL";
   let selectedTeam = localStorage.getItem(PREFS+".team") || "DAL";
@@ -410,9 +413,25 @@
     return true;
   }
 
+
+  async function loadProjections(force=false){
+    const cached = !force ? JSON.parse(localStorage.getItem(PROJECTIONS_CACHE) || "null") : null;
+    if(cached?.projections && Object.keys(cached.projections).length){
+      projectionsById=cached.projections;
+      return true;
+    }
+    const r=await fetch(PROJECTIONS_API);
+    if(!r.ok) throw new Error(`Sleeper projections HTTP ${r.status}`);
+    const data=await r.json();
+    projectionsById=buildSleeperStatsMap(data);
+    if(!Object.keys(projectionsById).length) throw new Error("Sleeper projections returned no usable records");
+    localStorage.setItem(PROJECTIONS_CACHE,JSON.stringify({savedAt:Date.now(),projections:projectionsById}));
+    return true;
+  }
+
   async function loadAll(force=false){
-    $("status").textContent=force?"Refreshing player data and 2025 stats…":"Loading player data and 2025 stats…";
-    let playerOK=false, statsOK=false;
+    $("status").textContent=force?"Refreshing players, 2025 stats, and 2026 projections…":"Loading players, 2025 stats, and 2026 projections…";
+    let playerOK=false, statsOK=false, projectionsOK=false;
     try{ await loadPlayers(force); playerOK=true; }catch(e){
       const c=JSON.parse(localStorage.getItem(PLAYER_CACHE)||"null");
       if(c?.players?.length){players=c.players;playerOK=true;}
@@ -421,8 +440,15 @@
       const c=JSON.parse(localStorage.getItem(STATS_CACHE)||"null");
       if(c?.stats){statsById=c.stats;statsOK=true;}
     }
+    try{ await loadProjections(force); projectionsOK=true; }catch(e){
+      const c=JSON.parse(localStorage.getItem(PROJECTIONS_CACHE)||"null");
+      if(c?.projections){projectionsById=c.projections;projectionsOK=true;}
+    }
     if(playerOK){
-      $("status").textContent=`${players.length} active players loaded${statsOK?" • 2025 stats loaded":" • 2025 stats unavailable (player rankings still work)"}.`;
+      const parts=[`${players.length} active players loaded`];
+      parts.push(statsOK?"2025 stats loaded":"2025 stats unavailable");
+      parts.push(projectionsOK?"2026 projections loaded":"2026 projections unavailable");
+      $("status").textContent=parts.join(" • ")+".";
       renderTeamTabs(); render();
     }else{
       $("status").textContent="Could not load players. Connect to the internet and tap Refresh players & stats.";
@@ -468,6 +494,23 @@
     return `<div class="stats"><span class="stat-primary">${fmt(pts,1)} ${scoring} pts</span>${ppg!==null?` • ${fmt(ppg,1)} PPG`:""}<br>${detail}</div>`;
   }
 
+  function projectionLine(p){
+    const s=projectionsById[p.id];
+    if(!s) return `<div class="stats projected">2026 proj: unavailable</div>`;
+    const pts=fantasyPoints(s);
+    let detail="";
+    if(p.position==="QB"){
+      detail=`Pass ${fmt(s.passYds)} YD / ${fmt(s.passTD)} TD • Rush ${fmt(s.rushYds)} YD / ${fmt(s.rushTD)} TD`;
+    }else if(p.position==="RB"){
+      detail=`${fmt(s.rushAtt)} CAR • ${fmt(s.rushYds)} RUSH YD • ${fmt(s.rec)} REC • ${fmt(s.recYds)} REC YD • ${fmt(s.rushTD+s.recTD)} TD`;
+    }else if(p.position==="WR" || p.position==="TE"){
+      detail=`${fmt(s.targets)} TGT • ${fmt(s.rec)} REC • ${fmt(s.recYds)} YD • ${fmt(s.recTD)} TD`;
+    }else{
+      detail=`Season projection`;
+    }
+    return `<div class="stats projected"><span class="stat-primary">2026 proj: ${fmt(pts,1)} ${scoring} pts</span><br>${detail}</div>`;
+  }
+
   function headshotMarkup(p){
     // Sleeper player portraits use the same stable player ID already used by the app.
     // DEF entries usually do not have a player portrait, so use a team-abbreviation fallback.
@@ -510,6 +553,7 @@
           <div class="name">${showRank?`<span class="rank">${rank||""}</span> `:""}${esc(p.name)}${view==="draft"&&priorityNeedForPosition(p.position)?`<span class="need-badge">NEED ${priorityNeedForPosition(p.position)}</span>`:""}</div>
           <div class="meta">${esc(p.team)} • ${esc(p.position)}${tier?` • ${tier}${rank}`:""}${injury}${drafted?" • Drafted":""}${mine?" • MY TEAM":""}</div>
           ${statsLine(p)}
+          ${projectionLine(p)}
         </div>
       </div>
       <div class="actions">
